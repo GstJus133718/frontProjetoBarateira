@@ -1,5 +1,6 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "./utils/hook/useAuth";
 import PersonIcon from "@mui/icons-material/Person";
 import LockIcon from "@mui/icons-material/Lock";
 import {
@@ -11,15 +12,58 @@ import {
   Avatar,
   InputAdornment,
   Typography,
+  Alert,
+  CircularProgress,
 } from "@mui/material";
 import Navbar from "./NavBar";
 
 const LoginAdmin = () => {
   const navigate = useNavigate();
+  const { login, loading, error, isAuthenticated, clearErrorMessage } = useAuth();
+  
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [localError, setLocalError] = useState("");
 
-  const handleLogin = () => {
-    // Navegar para a área admin sem verificação de login
-    navigate("/area-admin");
+  // Redirecionar se já estiver autenticado
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate("/area-admin");
+    }
+  }, [isAuthenticated, navigate]);
+
+  // Limpar erros quando os campos mudarem
+  useEffect(() => {
+    if (error) clearErrorMessage();
+    if (localError) setLocalError("");
+  }, [email, password, error, clearErrorMessage, localError]);
+
+  const handleLogin = async () => {
+    if (!email.trim()) {
+      setLocalError("Email é obrigatório");
+      return;
+    }
+    
+    if (!password.trim()) {
+      setLocalError("Senha é obrigatória");
+      return;
+    }
+
+    try {
+      const result = await login({ email, password });
+      
+      if (result.type === 'auth/loginUser/fulfilled') {
+        console.log("Login realizado com sucesso!");
+      }
+    } catch (err) {
+      console.error("Erro no login:", err);
+    }
+  };
+
+  const handleKeyPress = (event) => {
+    if (event.key === 'Enter') {
+      handleLogin();
+    }
   };
 
   return (
@@ -56,13 +100,23 @@ const LoginAdmin = () => {
           />
 
           <CardContent sx={{ width: "100%", maxWidth: 350 }}>
+            {/* Exibir erros */}
+            {(error || localError) && (
+              <Alert severity="error" sx={{ mb: 2 }}>
+                {localError || error}
+              </Alert>
+            )}
 
-            {/* Campo Usuário */}
+            {/* Campo Email */}
             <TextField
               fullWidth
               variant="standard"
               margin="normal"
-              placeholder="Usuário"
+              placeholder="Email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              onKeyPress={handleKeyPress}
+              disabled={loading}
               InputProps={{
                 startAdornment: (
                   <InputAdornment position="start">
@@ -91,6 +145,10 @@ const LoginAdmin = () => {
               variant="standard"
               margin="normal"
               placeholder="Senha"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              onKeyPress={handleKeyPress}
+              disabled={loading}
               InputProps={{
                 startAdornment: (
                   <InputAdornment position="start">
@@ -115,10 +173,23 @@ const LoginAdmin = () => {
             <Button
               fullWidth
               variant="contained"
-              sx={{ backgroundColor: "#0C58A3", color: "#fff", mt: 4 }}
+              sx={{ 
+                backgroundColor: "#0C58A3", 
+                color: "#fff", 
+                mt: 4,
+                position: 'relative'
+              }}
               onClick={handleLogin}
+              disabled={loading}
             >
-              Entrar
+              {loading ? (
+                <>
+                  <CircularProgress size={20} color="inherit" sx={{ mr: 1 }} />
+                  Entrando...
+                </>
+              ) : (
+                "Entrar"
+              )}
             </Button>
           </CardContent>
         </Card>
