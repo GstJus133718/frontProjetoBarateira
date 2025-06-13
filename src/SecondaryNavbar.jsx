@@ -9,7 +9,7 @@ const SECTION_IDS = {
 };
 
 const navItems = [
-    { label: "Encontre uma farmácia", action: "find_pharmacy", type: "link" }, // Adicionado tipo e ação para clareza
+    { label: "Encontre uma farmácia", action: "/encontrar-farmacia", type: "navigate" }, // ✅ Atualizado
     { label: "Produtos", action: "/todos-produtos", type: "navigate" },
     { label: "Produtos Infantis", action: SECTION_IDS.PRODUTOS_INFANTIS, type: "scroll" },
     { label: "Promoções Destaques", action: SECTION_IDS.PROMOCOES_DESTAQUES, type: "scroll" },
@@ -19,32 +19,26 @@ const SecondaryNavbar = () => {
     const navigate = useNavigate();
     const location = useLocation();
 
-    const handleNavClick = (item) => {
+    const handleItemClick = (item) => {
         if (item.type === "navigate") {
             navigate(item.action);
         } else if (item.type === "scroll") {
-            // Só rola se estiver na Home ('/')
             if (location.pathname === "/") {
-                const section = document.getElementById(item.action);
-                if (section) {
-                    section.scrollIntoView({ behavior: "smooth", block: "start" });
-                } else {
-                    console.warn(`Seção com ID "${item.action}" não encontrada na página.`);
+                // Já está na home, fazer scroll
+                const element = document.getElementById(item.action);
+                if (element) {
+                    element.scrollIntoView({ behavior: "smooth" });
                 }
             } else {
-                // Se não estiver na home, navega para home primeiro.
-                // A rolagem após navegação pode precisar de lógica adicional (ex: useEffect na Home)
-                // ou usar hash na URL (ex: navigate('/#produtos-infantis-section')) se o setup permitir.
-                // Por simplicidade, apenas navegamos para a home.
+                // Navegar para home e depois fazer scroll
                 navigate("/");
-                // Idealmente, passaria um estado ou usaria um hash para indicar a rolagem após carregar a Home.
-                // Exemplo com hash (requer configuração de Router ou lógica na Home):
-                // navigate(`/#${item.action}`);
+                setTimeout(() => {
+                    const element = document.getElementById(item.action);
+                    if (element) {
+                        element.scrollIntoView({ behavior: "smooth" });
+                    }
+                }, 100);
             }
-        } else if (item.action === "find_pharmacy") {
-            // Lógica para "Encontre uma farmácia" (pode ser navegação, modal, etc.)
-            console.log("Ação para encontrar farmácia");
-            // Exemplo: navigate("/encontrar-farmacia");
         }
     };
 
@@ -60,21 +54,24 @@ const SecondaryNavbar = () => {
             alignItems: "center",
           }}
         >
-          <Stack direction="row" spacing={6}>
+          <Stack direction="row" spacing={4}>
             {navItems.map((item, index) => (
               <Typography
                 key={index}
-                variant="body1"
-                onClick={() => handleNavClick(item)}
+                variant="body2"
                 sx={{
-                  //fontWeight: item.active ? "bold" : "normal", // Remover 'active' fixo
-                  color: "#333",
                   cursor: "pointer",
+                  color: "#333",
+                  fontWeight: 500,
+                  padding: "8px 16px",
+                  borderRadius: 1,
+                  transition: "all 0.2s ease",
                   "&:hover": {
-                    color: "#0C58A3", // Cor de hover azul
-                    textDecoration: "underline",
+                    backgroundColor: "#e0e0e0",
+                    color: "#0C58A3",
                   },
                 }}
+                onClick={() => handleItemClick(item)}
               >
                 {item.label}
               </Typography>
@@ -83,7 +80,6 @@ const SecondaryNavbar = () => {
         </Box>
       </Box>
     );
-  };
+};
 
 export default SecondaryNavbar;
-

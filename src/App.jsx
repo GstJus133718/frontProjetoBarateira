@@ -24,6 +24,7 @@ import Cart from "./Cart";
 import Product from "./Product";
 import HistoricoVendas from "./HistoricoVendas";
 import TodosProdutos from "./TodosProdutos";
+import EncontrarFarmacia from './EncontrarFarmacia';
 
 function Home() {
   return (
@@ -56,6 +57,7 @@ function App() {
           <Route path="/" element={<Home />} />
           <Route path="/todos-produtos" element={<TodosProdutos />} />
           <Route path="/admin" element={<LoginAdmin />} />
+          <Route path="/encontrar-farmacia" element={<EncontrarFarmacia />} />
           
           {/* Rotas protegidas - requerem autenticação */}
           <Route path="/area-admin" element={
