@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { useAuth } from "./utils/hook/useAuth";
+import { useAuth } from "../utils/hook/useAuth";
 import PersonIcon from "@mui/icons-material/Person";
 import LockIcon from "@mui/icons-material/Lock";
 import {
@@ -11,11 +11,10 @@ import {
   Button,
   Avatar,
   InputAdornment,
-  Typography,
   Alert,
   CircularProgress,
 } from "@mui/material";
-import Navbar from "./NavBar";
+import Navbar from "../NavBar";
 
 const LoginAdmin = () => {
   const navigate = useNavigate();
@@ -36,9 +35,10 @@ const LoginAdmin = () => {
   useEffect(() => {
     if (error) clearErrorMessage();
     if (localError) setLocalError("");
-  }, [email, password, error, clearErrorMessage, localError]);
+  }, [email, password]);
 
   const handleLogin = async () => {
+    // Validações básicas
     if (!email.trim()) {
       setLocalError("Email é obrigatório");
       return;
@@ -52,7 +52,8 @@ const LoginAdmin = () => {
     try {
       const result = await login({ email, password });
       
-      if (result.type === 'auth/loginUser/fulfilled') {
+      if (result.type === 'auth/login') {
+        // Login bem-sucedido, navegação será tratada pelo useEffect
         console.log("Login realizado com sucesso!");
       }
     } catch (err) {

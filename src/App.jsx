@@ -13,7 +13,7 @@ import Promotion from "./Promotion";
 import ChildrenProduct from "./ChildrenProduct";
 import ContatoSection from "./ContatoSection";
 import Footer from "./Footer";
-import LoginAdmin from "./LoginAdmin";
+import LoginAdmin from "./profile/LoginAdmin";
 import AreaAdmin from "./AreaAdmin";
 import SellersAdmin from "./SellersAdmin";
 import CustomerAdmin from "./CustomerAdmin";
