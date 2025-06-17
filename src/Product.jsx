@@ -162,18 +162,14 @@ const Product = () => {
     }
 
     // <<< Determinar preços e desconto com base na promoção ativa
-    let precoFinal = produto.preco || "R$ 0,00";
+    let precoFinal = produto.valor_real ? formatarParaMoedaBRL(produto.valor_real) : (produto.preco || "R$ 0,00");
     let precoAntigo = null;
-    let descontoPercentual = 0;
+    let descontoPercentual = produto.desconto || 0;
+    let economia = produto.economia || 0;
 
-    if (promocaoAtiva) {
-        precoFinal = promocaoAtiva.valorComDesconto || produto.preco; // Usa o valor com desconto da promoção
-        precoAntigo = promocaoAtiva.valor || produto.preco; // Usa o valor original da promoção como antigo
-        // Extrai o número do desconto da string (ex: "15 %")
-        const match = promocaoAtiva.desconto?.match(/(\d+)/);
-        if (match) {
-            descontoPercentual = parseInt(match[1], 10);
-        }
+    // Se tem promoção ativa, mostrar preço original e economia
+    if (produto.em_promocao && economia > 0) {
+        precoAntigo = formatarParaMoedaBRL(produto.preco_unitario || 0);
     }
 
     const imagensProduto = produto.imagens || [];
@@ -232,17 +228,39 @@ const Product = () => {
                         <Typography variant="body2" sx={{ mb: 2 }}>{produto.descricao || "Sem descrição disponível."}</Typography>
 
                         {/* <<< Preços e Desconto AJUSTADO */}
-                        <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', mb: 2, minHeight: '2.5em' /* Garante altura mínima */ }}>
-                            {promocaoAtiva && precoAntigo && precoAntigo !== precoFinal && (
-                                <Typography sx={{ textDecoration: "line-through", color: "text.secondary", mr: 1, fontSize: '1rem' }}>{precoAntigo}</Typography>
+                        <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', mb: 2, minHeight: '2.5em' }}>
+                            {precoAntigo && economia > 0 && (
+                                <Typography sx={{ textDecoration: "line-through", color: "text.secondary", mr: 1, fontSize: '1rem' }}>
+                                    {precoAntigo}
+                                </Typography>
                             )}
-                            {promocaoAtiva && descontoPercentual > 0 && (
-                                <Box component="span" sx={{ backgroundColor: '#F15A2B', /* Cor do desconto */ color: 'white', borderRadius: 1, px: 1, py: 0.5, fontSize: '0.8rem', fontWeight: 'bold', mr: 1 }}>
+                            {descontoPercentual > 0 && (
+                                <Box component="span" sx={{ 
+                                    backgroundColor: '#F15A2B', 
+                                    color: 'white', 
+                                    borderRadius: 1, 
+                                    px: 1, 
+                                    py: 0.5, 
+                                    fontSize: '0.8rem', 
+                                    fontWeight: 'bold', 
+                                    mr: 1 
+                                }}>
                                     -{descontoPercentual}%
                                 </Box>
                             )}
-                            <Typography variant="h6" color="#0C58A3" /* Cor do preço */ sx={{ fontWeight: 600 }}>{precoFinal}</Typography>
+                            <Typography variant="h6" color="#0C58A3" sx={{ fontWeight: 600 }}>
+                                {precoFinal}
+                            </Typography>
                         </Box>
+
+                        {/* ✅ NOVO: Mostrar economia se houver */}
+                        {economia > 0 && (
+                            <Box sx={{ mb: 2 }}>
+                                <Typography variant="body2" color="success.main" sx={{ fontWeight: 'bold' }}>
+                                    🎉 Você economiza R$ {economia.toFixed(2).replace('.', ',')} neste produto!
+                                </Typography>
+                            </Box>
+                        )}
 
                         {/* Disponibilidade */}
                         <Typography variant="body2" sx={{ mb: 0.5 }}>Disponível em:</Typography>

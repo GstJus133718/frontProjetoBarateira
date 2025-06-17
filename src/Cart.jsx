@@ -52,9 +52,8 @@ const precoParaNumero = (precoStr) => {
     if (typeof precoStr !== 'string') {
         return 0;
     }
-    // Remove caracteres não numéricos, exceto vírgula e ponto, depois substitui vírgula por ponto
+
     const valorLimpo = precoStr.replace(/[^\d,.-]/g, "").replace(",", ".");
-    // Considera apenas o último ponto como decimal, remove os outros
     const partes = valorLimpo.split('.');
     let valorFormatado = valorLimpo;
     if (partes.length > 2) {
@@ -62,6 +61,24 @@ const precoParaNumero = (precoStr) => {
     }
     const valorNum = parseFloat(valorFormatado);
     return isNaN(valorNum) ? 0 : valorNum;
+};
+
+const obterPrecoFinalProduto = (produto) => {
+    if (produto.valor_real !== undefined && produto.valor_real !== null) {
+        return produto.valor_real;
+    }
+    return precoParaNumero(produto.preco || 0);
+};
+
+// ✅ NOVO: Função para obter preço original do produto
+const obterPrecoOriginalProduto = (produto) => {
+    // Se tem preco_unitario, usar ele como preço original
+    if (produto.preco_unitario !== undefined && produto.preco_unitario !== null) {
+        return produto.preco_unitario;
+    }
+    
+    // Fallback para o sistema antigo
+    return precoParaNumero(produto.preco || 0);
 };
 
 // <<< NOVA FUNÇÃO: Calcular preço com desconto de forma segura
@@ -240,16 +257,13 @@ const Cart = () => {
         let totalDesconto = 0;
 
         carrinho.forEach(item => {
-            const itemIdStr = String(item.id);
-            const precoOriginalItem = precoParaNumero(item.preco);
+            const precoOriginalItem = obterPrecoOriginalProduto(item);
+            const precoFinalItem = obterPrecoFinalProduto(item);
             const quantidade = item.quantidade;
+            
             subtotalOriginal += precoOriginalItem * quantidade;
-
-            const promocao = promocoesAtivasMap.get(itemIdStr);
-            // <<< Usa a função segura para calcular o preço final do item
-            const precoFinalItem = calcularPrecoComDescontoSeguro(precoOriginalItem, promocao);
-
-            // Calcula o desconto apenas se o preço final for menor que o original
+            
+            // Se tem economia/desconto, calcular
             if (precoFinalItem < precoOriginalItem) {
                 const descontoPorItem = precoOriginalItem - precoFinalItem;
                 totalDesconto += descontoPorItem * quantidade;
@@ -422,14 +436,12 @@ const Cart = () => {
                                 <Typography variant="body1" color="text.secondary">O carrinho está vazio.</Typography>
                             ) : (
                                 <List>
-                                    {carrinho.map((item) => {
-                                        const itemIdStr = String(item.id);
-                                        const promocaoItem = promocoesAtivasMap.get(itemIdStr);
-                                        const precoOriginalUnitario = precoParaNumero(item.preco);
-                                        // <<< Usa a função segura para calcular o preço final do item
-                                        const precoFinalUnitario = calcularPrecoComDescontoSeguro(precoOriginalUnitario, promocaoItem);
+                                     {carrinho.map((item) => {
+                                        const precoOriginalUnitario = obterPrecoOriginalProduto(item);
+                                        const precoFinalUnitario = obterPrecoFinalProduto(item);
                                         const temDesconto = precoFinalUnitario < precoOriginalUnitario;
                                         let descontoPercentual = 0;
+                                        
                                         if (temDesconto && precoOriginalUnitario > 0) {
                                             descontoPercentual = Math.round(((precoOriginalUnitario - precoFinalUnitario) / precoOriginalUnitario) * 100);
                                         }
@@ -458,7 +470,7 @@ const Cart = () => {
                                                     primary={item.nome}
                                                     secondary={
                                                         <React.Fragment>
-                                                            {/* Exibição de Preço com Desconto CORRIGIDA */}
+                                                            {/* ✅ NOVO: Exibição de Preço com nova estrutura */}
                                                             {temDesconto ? (
                                                                 <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.5, flexWrap: "wrap" }}>
                                                                     <Typography sx={{ textDecoration: "line-through" }} component="span" variant="body2" color="text.secondary">
@@ -473,9 +485,17 @@ const Cart = () => {
                                                                 </Box>
                                                             ) : (
                                                                 <Typography component="span" variant="body2" color="text.primary" sx={{ mb: 0.5, display: "block" }}>
-                                                                    {formatarMoeda(precoOriginalUnitario)}
+                                                                    {formatarMoeda(precoFinalUnitario)}
                                                                 </Typography>
                                                             )}
+                                                            
+                                                            {/* ✅ NOVO: Mostrar economia total se houver */}
+                                                            {temDesconto && item.economia && (
+                                                                <Typography variant="caption" color="success.main" sx={{ fontWeight: 'bold', display: 'block' }}>
+                                                                    Economia: R$ {(item.economia * item.quantidade).toFixed(2).replace('.', ',')}
+                                                                </Typography>
+                                                            )}
+                                                            
                                                             {/* Controle de Quantidade */}
                                                             <Box sx={{ display: "flex", alignItems: "center", mt: 0.5 }}>
                                                                 <IconButton size="small" onClick={() => diminuirQuantidade(item.id)} disabled={item.quantidade <= 1}>

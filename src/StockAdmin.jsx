@@ -17,124 +17,117 @@ import {
     DialogContent,
     DialogContentText,
     DialogTitle,
-    // Checkbox, // Removido pois a coluna Promoção foi removida
+    CircularProgress,
+    Alert,
+    Snackbar,
+    Chip
 } from "@mui/material";
 import SearchIcon from "@mui/icons-material/Search";
 import PersonOutlineOutlinedIcon from "@mui/icons-material/PersonOutlineOutlined";
+import InventoryIcon from '@mui/icons-material/Inventory';
 import { useNavigate } from "react-router-dom";
 import InputAdornment from "@mui/material/InputAdornment";
 import AddProductModal from "./AddProductModal"; 
 import EditProductModal from "./EditProductModal";
-
-// Dados iniciais mockados (usados apenas se o localStorage estiver vazio)
-const produtosMock = [
-    {
-        id: "01",
-        nome: "Remédio 01",
-        principioAtivo: "Princípio 01",
-        marca: "Marca",
-        categoria: "Medicamento",
-        quantidade: 1,
-        filial: "Norte",
-        // promocao: true, // Campo removido da visualização
-        // desconto: 15, // Campo removido da visualização
-        preco: "R$10,00",
-    },
-    {
-        id: "02",
-        nome: "Remédio 02",
-        principioAtivo: "Princípio 02",
-        marca: "Marca",
-        categoria: "Medicamento",
-        quantidade: 2,
-        filial: "Norte",
-        // promocao: true,
-        // desconto: 10,
-        preco: "R$10,00",
-    },
-    {
-        id: "03",
-        nome: "Remédio 03",
-        principioAtivo: "Princípio 03",
-        marca: "Marca",
-        categoria: "Medicamento",
-        quantidade: 10,
-        filial: "Norte",
-        // promocao: true,
-        // desconto: 50,
-        preco: "R$10,00",
-    },
-    {
-        id: "04",
-        nome: "Remédio 04",
-        principioAtivo: "Princípio 04",
-        marca: "Marca",
-        categoria: "Medicamento",
-        quantidade: 100,
-        filial: "Norte",
-        // promocao: false,
-        // desconto: 0,
-        preco: "R$10,00",
-    },
-];
+import EstoqueModal from "./EstoqueModal";
+import { produtoService } from './services/produtoService';
 
 const StockAdmin = () => {
-    // Função para inicializar produtos
-    const getInitialProdutos = () => {
-        const savedProdutos = localStorage.getItem("produtos");
-        // Se houver produtos salvos, usa eles, senão usa o mock.
-        // A estrutura dos produtos salvos pode não ter mais 'promocao' ou 'desconto'
-        // dependendo de onde são atualizados.
-        return savedProdutos ? JSON.parse(savedProdutos) : produtosMock;
-    };
-    
-    // Removido estado e lógica de promoções pois as colunas foram removidas
-    // const getInitialPromocoes = () => { ... };
-    // const [promocoes, setPromocoes] = useState(getInitialPromocoes);
-
-    const [produtos, setProdutos] = useState(getInitialProdutos);
+    const [produtos, setProdutos] = useState([]);
     const [busca, setBusca] = useState("");
     const [openModal, setOpenModal] = useState(false);
     const [produtoSelecionado, setProdutoSelecionado] = useState(null);
     const [openEditModal, setOpenEditModal] = useState(false);
     const [openDeleteModal, setOpenDeleteModal] = useState(false);
     const [produtoParaExcluir, setProdutoParaExcluir] = useState(null);
+    
+    // Novo estado para modal de estoque
+    const [openEstoqueModal, setOpenEstoqueModal] = useState(false);
+    const [produtoEstoqueSelecionado, setProdutoEstoqueSelecionado] = useState(null);
+    
+    // Estados para feedback e loading
+    const [loading, setLoading] = useState(true);
+    const [operationLoading, setOperationLoading] = useState(false);
+    const [error, setError] = useState(null);
+    const [success, setSuccess] = useState(null);
+    
     const navigate = useNavigate();
 
-    // Salvar produtos no localStorage sempre que mudar
-    useEffect(() => {
-        localStorage.setItem("produtos", JSON.stringify(produtos));
-    }, [produtos]);
-
-    // Removido useEffect para salvar promoções
-    // useEffect(() => { localStorage.setItem("promocoes", JSON.stringify(promocoes)); }, [promocoes]);
-
-    // Removido listener de storage para promoções
-    /*
-    useEffect(() => {
-        const handleStorageChange = () => {
-            // Apenas recarrega produtos se necessário
-            const currentProdutos = localStorage.getItem("produtos");
-            if (currentProdutos) {
-                 setProdutos(JSON.parse(currentProdutos));
+    // Carregar produtos da API
+    const carregarProdutos = async () => {
+        try {
+            setLoading(true);
+            setError(null);
+            const response = await produtoService.listar();
+            
+            console.log('Response da API produtos:', response);
+            
+            // Extrair os produtos da resposta
+            let produtosData = [];
+            if (response && response.produtos && Array.isArray(response.produtos)) {
+                produtosData = response.produtos;
+            } else if (Array.isArray(response)) {
+                produtosData = response;
             }
-        };
-        window.addEventListener('storage', handleStorageChange);
-        return () => {
-            window.removeEventListener('storage', handleStorageChange);
-        };
-    }, []);
-    */
-   // Simplificado: Carrega produtos na montagem inicial
+            
+            // Formatar os dados dos produtos para o frontend
+            const produtosFormatados = produtosData.map(produto => ({
+                id: produto.ID || produto.id,
+                nome: produto.nome || '',
+                principioAtivo: produto.principio_ativo || produto.principioAtivo || '',
+                marca: produto.marca || '',
+                categoria: produto.departamento || produto.categoria || '',
+                departamento: produto.departamento || produto.categoria || '',
+                // ✅ NOVO: Usar valor_real como preço de exibição
+                preco: produto.valor_real ? `R$ ${produto.valor_real.toFixed(2).replace('.', ',')}` : 'R$ 0,00',
+                preco_unitario: produto.preco_unitario || 0,
+                valor_real: produto.valor_real || produto.preco_unitario || 0,
+                economia: produto.economia || 0,
+                em_promocao: produto.em_promocao || false,
+                desconto: produto.desconto || 0,
+                generico: produto.generico || false,
+                // Estoque será carregado separadamente se necessário
+                estoque_total: produto.estoque_total || 0,
+                // Manter dados originais para referência
+                ...produto
+            }));
+            
+            setProdutos(produtosFormatados);
+        } catch (error) {
+            console.error('Erro ao carregar produtos:', error);
+            setError('Erro ao carregar lista de produtos. Tente novamente.');
+            setProdutos([]);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // Carregar produtos ao montar o componente
     useEffect(() => {
-        setProdutos(getInitialProdutos());
+        carregarProdutos();
     }, []);
+
+    // Auto-fechar mensagens de sucesso e erro
+    useEffect(() => {
+        if (success) {
+            const timer = setTimeout(() => setSuccess(null), 5000);
+            return () => clearTimeout(timer);
+        }
+    }, [success]);
+
+    useEffect(() => {
+        if (error) {
+            const timer = setTimeout(() => setError(null), 8000);
+            return () => clearTimeout(timer);
+        }
+    }, [error]);
 
     const handleLogout = () => {
         navigate("/admin");
     };
 
     const handleEditar = (produto) => {
+        console.log('Produto selecionado para edição:', produto);
         setProdutoSelecionado(produto);
         setOpenEditModal(true);
     };
@@ -144,245 +137,344 @@ const StockAdmin = () => {
         setOpenDeleteModal(true);
     };
 
-    const confirmarExclusao = () => {
-        if (produtoParaExcluir) {
-            // Remove o produto
-            const novosProdutos = produtos.filter(
-                (p) => p.id !== produtoParaExcluir.id
-            );
-            setProdutos(novosProdutos);
-            
-            // Remove a promoção associada, se existir (ainda necessário para consistência dos dados)
-            const savedPromocoes = localStorage.getItem("promocoes");
-            let promocoes = savedPromocoes ? JSON.parse(savedPromocoes) : [];
-            const novasPromocoes = promocoes.filter(
-                (promo) => promo.id !== produtoParaExcluir.id
-            );
-            localStorage.setItem("promocoes", JSON.stringify(novasPromocoes));
+    // Nova função para gerenciar estoque
+    const handleGerenciarEstoque = (produto) => {
+        console.log('Produto selecionado para gestão de estoque:', produto);
+        setProdutoEstoqueSelecionado(produto);
+        setOpenEstoqueModal(true);
+    };
 
-            setOpenDeleteModal(false);
-            setProdutoParaExcluir(null);
+    const confirmarExclusao = async () => {
+        if (produtoParaExcluir) {
+            try {
+                setOperationLoading(true);
+                await produtoService.deletar(produtoParaExcluir.id);
+                setSuccess('Produto excluído com sucesso!');
+                await carregarProdutos(); // Recarregar lista
+            } catch (error) {
+                console.error('Erro ao excluir produto:', error);
+                setError('Erro ao excluir produto. Tente novamente.');
+            } finally {
+                setOperationLoading(false);
+                setOpenDeleteModal(false);
+                setProdutoParaExcluir(null);
+            }
         }
     };
 
-    const adicionarProduto = (novoProduto) => {
-        const novoId = (Math.max(0, ...produtos.map(p => parseInt(p.id))) + 1).toString().padStart(2, '0');
-        const produtoComId = {
-            ...novoProduto,
-            id: novoId,
-            // Não adiciona mais campos de promoção/desconto aqui
-        };
-        setProdutos([...produtos, produtoComId]);
-        setOpenModal(false);
+    const adicionarProduto = async (novoProduto) => {
+        try {
+            setOperationLoading(true);
+            setSuccess('Produto adicionado com sucesso!');
+            setOpenModal(false);
+            await carregarProdutos(); // Recarregar lista
+        } catch (error) {
+            console.error('Erro ao adicionar produto:', error);
+            setError('Erro ao adicionar produto. Verifique os dados e tente novamente.');
+        } finally {
+            setOperationLoading(false);
+        }
     };
 
-    const atualizarProduto = (produtoAtualizado) => {
-        const novosProdutos = produtos.map(p => 
-            p.id === produtoAtualizado.id ? produtoAtualizado : p
-        );
-        setProdutos(novosProdutos);
-        setOpenEditModal(false);
-        setProdutoSelecionado(null);
+    const atualizarProduto = async (produtoAtualizado) => {
+        try {
+            setOperationLoading(true);
+            setSuccess('Produto atualizado com sucesso!');
+            setOpenEditModal(false);
+            setProdutoSelecionado(null);
+            await carregarProdutos(); // Recarregar lista
+        } catch (error) {
+            console.error('Erro ao atualizar produto:', error);
+            setError('Erro ao atualizar produto. Verifique os dados e tente novamente.');
+        } finally {
+            setOperationLoading(false);
+        }
     };
 
-    // Removida função handlePromocaoChange
-    // const handlePromocaoChange = (id, checked) => { ... };
-
+    // Filtrar produtos
     const produtosFiltrados = produtos.filter((produto) => {
         const termoBusca = busca.toLowerCase();
-        // Ajustar a busca para não incluir campos removidos se necessário
-        return (produto.nome && produto.nome.toLowerCase().includes(termoBusca)) ||
+        return (
+            (produto.nome && produto.nome.toLowerCase().includes(termoBusca)) ||
             (produto.principioAtivo && produto.principioAtivo.toLowerCase().includes(termoBusca)) ||
             (produto.marca && produto.marca.toLowerCase().includes(termoBusca)) ||
-            (produto.categoria && produto.categoria.toLowerCase().includes(termoBusca)) ||
-            (produto.filial && produto.filial.toLowerCase().includes(termoBusca)) ||
-            (produto.preco && produto.preco.toLowerCase().includes(termoBusca));
+            (produto.categoria && produto.categoria.toLowerCase().includes(termoBusca))
+        );
     });
+
+    // Função para renderizar status do estoque
+    const renderizarStatusEstoque = (produto) => {
+        const estoqueTotal = produto.estoque_total || 0;
+        
+        if (estoqueTotal === 0) {
+            return <Chip label="Sem Estoque" color="error" size="small" />;
+        } else if (estoqueTotal < 10) {
+            return <Chip label={`${estoqueTotal} unidades`} color="warning" size="small" />;
+        } else {
+            return <Chip label={`${estoqueTotal} unidades`} color="success" size="small" />;
+        }
+    };
+
+    if (loading) {
+        return (
+            <Box sx={{ minHeight: "100vh", backgroundColor: "#f5f5f5" }}>
+                <Box sx={{ 
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    minHeight: '50vh',
+                    gap: 2
+                }}>
+                    <CircularProgress size={60} />
+                    <Typography variant="body1" color="text.secondary">
+                        Carregando produtos...
+                    </Typography>
+                </Box>
+            </Box>
+        );
+    }
 
     return (
         <Box sx={{ minHeight: "100vh", backgroundColor: "#f5f5f5" }}>
-            {/* Navbar */}
-            <Box
-                sx={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    padding: "16px 24px",
-                    borderBottom: "1px solid #e0e0e0",
-                    backgroundColor: "#fff",
-                    boxShadow: 1,
-                }}
-            >
+            {/* Header */}
+            <Box sx={{ 
+                display: "flex", 
+                justifyContent: "space-between", 
+                alignItems: "center",
+                padding: "16px 24px", 
+                borderBottom: "1px solid #e0e0e0",
+                backgroundColor: "#fff", 
+                boxShadow: 1,
+            }}>
                 <Avatar
-                    src="../public/logo/logo_3.png"
+                    src="/logo/logo_3.png"
                     alt="A Barateira"
                     variant="square"
-                    sx={{ width: 200, height: 115 }}
+                    sx={{ width: 200, height: 115, objectFit: "contain" }}
                 />
                 <Box sx={{ display: "flex", alignItems: "center" }}>
                     <PersonOutlineOutlinedIcon sx={{ color: "#666", mr: 1 }} />
-                    <Box sx={{ color: "text.secondary", mr: 3 }}>
-                        <Typography variant="body2" sx={{ m: 0 }}>Olá,</Typography>
-                        <Typography variant="body2" sx={{ m: 0, fontWeight: 'bold' }}>Vendedor</Typography>
-                    </Box>
+                    <Typography sx={{ color: "#666", mr: 2 }}>Área Administrativa</Typography>
                     <Button
                         variant="outlined"
-                        sx={{
-                            borderRadius: 20,
-                            borderColor: "#e0e0e0",
-                            color: "#666",
-                            px: 4,
-                            py: 1,
-                        }}
                         onClick={handleLogout}
+                        sx={{ textTransform: "none" }}
                     >
                         Sair
                     </Button>
                 </Box>
             </Box>
 
-            {/* Conteúdo */}
-            <Box sx={{ p: 3 }}>
-                <Box
-                    sx={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                        mb: 2,
-                    }}
-                >
-                    <Button
-                        variant="outlined"
-                        sx={{ width: "250px" }}
-                        onClick={() => setOpenModal(true)}
-                    >
-                        Adicionar Produto
-                    </Button>
+            <Box sx={{ padding: "24px" }}>
+                <Typography variant="h4" gutterBottom>
+                    Gestão de Produtos e Estoque
+                </Typography>
+
+                {/* Mensagens de Sucesso e Erro */}
+                {success && (
+                    <Alert severity="success" sx={{ mb: 2 }} onClose={() => setSuccess(null)}>
+                        {success}
+                    </Alert>
+                )}
+
+                {error && (
+                    <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
+                        {error}
+                    </Alert>
+                )}
+
+                {/* Controles */}
+                <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 3 }}>
                     <TextField
-                        size="small"
-                        placeholder="Buscar..."
+                        placeholder="Buscar produto..."
                         variant="outlined"
                         value={busca}
                         onChange={(e) => setBusca(e.target.value)}
-                        sx={{
-                            width: "600px",
-                            backgroundColor: "#EBEBEB",
-                            borderRadius: "5px",
-                            "& fieldset": { border: "none" },
-                        }}
+                        sx={{ width: "300px" }}
                         InputProps={{
-                            endAdornment: (
-                                <InputAdornment position="end">
+                            startAdornment: (
+                                <InputAdornment position="start">
                                     <SearchIcon />
                                 </InputAdornment>
                             ),
                         }}
                     />
-                    <Button
-                        variant="outlined"
-                        sx={{ width: "150px" }}
-                        onClick={() => navigate("/area-admin")}
-                    >
-                        Voltar
-                    </Button>
+                    <Box sx={{ display: "flex", gap: 2 }}>
+                        <Button
+                            variant="contained"
+                            onClick={() => setOpenModal(true)}
+                            disabled={operationLoading}
+                            sx={{ backgroundColor: "#0C58A3", "&:hover": { backgroundColor: "#094a8a" } }}
+                        >
+                            Adicionar Produto
+                        </Button>
+                        <Button
+                            variant="outlined"
+                            onClick={() => navigate("/admin")}
+                        >
+                            Voltar
+                        </Button>
+                    </Box>
                 </Box>
+
+                {/* Debug: Mostrar quantidade de produtos carregados */}
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                    {produtos.length} produto(s) carregado(s)
+                </Typography>
 
                 {/* Tabela */}
                 <TableContainer component={Paper}>
                     <Table>
+                        
                         <TableHead>
                             <TableRow>
                                 <TableCell>ID</TableCell>
                                 <TableCell>Nome</TableCell>
                                 <TableCell>Princípio Ativo</TableCell>
                                 <TableCell>Marca</TableCell>
-                                <TableCell>Categoria</TableCell>
-                                <TableCell>Quantidade</TableCell>
-                                <TableCell>Filial</TableCell>
-                                {/* <TableCell>Promoção</TableCell> */} {/* Coluna Removida */}
-                                {/* <TableCell>Desconto (%)</TableCell> */} {/* Coluna Removida */}
-                                <TableCell>Preço</TableCell>
+                                <TableCell>Departamento</TableCell>
+                                <TableCell>Preço Original</TableCell>
+                                <TableCell>Preço Final</TableCell>
+                                <TableCell>Economia</TableCell>
+                                <TableCell>Genérico</TableCell>
+                                <TableCell>Em Promoção</TableCell>
+                                <TableCell>Estoque</TableCell>
                                 <TableCell>Ações</TableCell>
                             </TableRow>
                         </TableHead>
                         <TableBody>
-                            {produtosFiltrados.map((produto) => {
-                                // Removida lógica para buscar promoção ativa e desconto
-                                // const promocaoDoProduto = promocoes.find(promo => promo.id === produto.id);
-                                // const isPromocaoAtiva = promocaoDoProduto && promocaoDoProduto.status === "Ativo";
-                                // const descontoDaPromocao = isPromocaoAtiva ? promocaoDoProduto.desconto : "0 %";
-                                
-                                return (
+                            {produtosFiltrados.length > 0 ? (
+                                produtosFiltrados.map((produto) => (
                                     <TableRow key={produto.id}>
                                         <TableCell>{produto.id}</TableCell>
                                         <TableCell>{produto.nome}</TableCell>
                                         <TableCell>{produto.principioAtivo}</TableCell>
                                         <TableCell>{produto.marca}</TableCell>
                                         <TableCell>{produto.categoria}</TableCell>
-                                        <TableCell>{produto.quantidade}</TableCell>
-                                        <TableCell>{produto.filial}</TableCell>
-                                        {/* Coluna Promoção Removida 
                                         <TableCell>
-                                            <Checkbox 
-                                                checked={isPromocaoAtiva} 
-                                                disabled={!promocaoDoProduto} 
-                                                onChange={(e) => handlePromocaoChange(produto.id, e.target.checked)}
-                                            />
+                                            {`R$ ${produto.preco_unitario.toFixed(2).replace('.', ',')}`}
                                         </TableCell>
-                                        */}
-                                        {/* Coluna Desconto Removida 
-                                        <TableCell>{descontoDaPromocao}</TableCell> 
-                                        */}
-                                        <TableCell>{produto.preco}</TableCell>
                                         <TableCell>
-                                            <Button
-                                                size="small"
-                                                variant="contained"
-                                                sx={{ mr: 1, width: "5rem", background: "#0C58A3" }}
-                                                onClick={() => handleEditar(produto)}
+                                            <Typography 
+                                                variant="body2" 
+                                                fontWeight={produto.em_promocao ? "bold" : "normal"}
+                                                color={produto.em_promocao ? "primary" : "text.primary"}
                                             >
-                                                Editar
-                                            </Button>
-                                            <Button
-                                                size="small"
-                                                variant="contained"
-                                                sx={{ mr: 1, width: "5rem", background: "#E84C3E" }}
-                                                onClick={() => handleExcluir(produto)}
-                                            >
-                                                Excluir
-                                            </Button>
+                                                {`R$ ${produto.valor_real.toFixed(2).replace('.', ',')}`}
+                                            </Typography>
+                                        </TableCell>
+                                        <TableCell>
+                                            {produto.economia > 0 ? (
+                                                <Typography variant="body2" color="success.main" fontWeight="bold">
+                                                    R$ {produto.economia.toFixed(2).replace('.', ',')}
+                                                </Typography>
+                                            ) : (
+                                                <Typography variant="body2" color="text.secondary">
+                                                    -
+                                                </Typography>
+                                            )}
+                                        </TableCell>
+                                        <TableCell>{produto.generico ? 'Sim' : 'Não'}</TableCell>
+                                        <TableCell>
+                                            {produto.em_promocao ? (
+                                                <Chip 
+                                                    label={`${produto.desconto}% OFF`} 
+                                                    color="success" 
+                                                    size="small" 
+                                                />
+                                            ) : (
+                                                'Não'
+                                            )}
+                                        </TableCell>
+                                        <TableCell>{renderizarStatusEstoque(produto)}</TableCell>
+                                        <TableCell>
+                                            <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+                                                <Button
+                                                    size="small"
+                                                    variant="contained"
+                                                    sx={{ minWidth: "auto", px: 1, background: "#0C58A3" }}
+                                                    onClick={() => handleEditar(produto)}
+                                                    disabled={operationLoading}
+                                                >
+                                                    Editar
+                                                </Button>
+                                                <Button
+                                                    size="small"
+                                                    variant="contained"
+                                                    sx={{ minWidth: "auto", px: 1, background: "#E84C3E" }}
+                                                    onClick={() => handleExcluir(produto)}
+                                                    disabled={operationLoading}
+                                                >
+                                                    Excluir
+                                                </Button>
+                                                <Button
+                                                    size="small"
+                                                    variant="contained"
+                                                    startIcon={<InventoryIcon />}
+                                                    sx={{ 
+                                                        minWidth: "auto", 
+                                                        px: 1, 
+                                                        background: "#4CAF50",
+                                                        '&:hover': { background: "#45a049" }
+                                                    }}
+                                                    onClick={() => handleGerenciarEstoque(produto)}
+                                                    disabled={operationLoading}
+                                                >
+                                                    Estoque
+                                                </Button>
+                                            </Box>
                                         </TableCell>
                                     </TableRow>
-                                );
-                            })}
+                                ))
+                            ) : (
+                                <TableRow>
+                                    <TableCell colSpan={10} align="center">
+                                        <Typography variant="body2" color="text.secondary">
+                                            {busca ? 'Nenhum produto encontrado com os filtros aplicados.' : 'Nenhum produto cadastrado.'}
+                                        </Typography>
+                                    </TableCell>
+                                </TableRow>
+                            )}
                         </TableBody>
                     </Table>
                 </TableContainer>
             </Box>
 
             {/* Modal de Adição */}
-            {openModal && (
-                <AddProductModal 
-                    open={openModal} 
-                    handleClose={() => setOpenModal(false)} 
-                    adicionarProduto={adicionarProduto}
-                />
-            )}
+            <AddProductModal 
+                open={openModal} 
+                handleClose={() => setOpenModal(false)} 
+                adicionarProduto={adicionarProduto}
+            />
             
             {/* Modal de Edição */}
-            {openEditModal && (
-                <EditProductModal
-                    open={openEditModal}
-                    handleClose={() => setOpenEditModal(false)}
-                    produto={produtoSelecionado}
-                    atualizarProduto={atualizarProduto}
-                />
-            )}
+            <EditProductModal
+                open={openEditModal}
+                handleClose={() => {
+                    setOpenEditModal(false);
+                    setProdutoSelecionado(null);
+                }}
+                produto={produtoSelecionado}
+                atualizarProduto={atualizarProduto}
+            />
+
+            {/* Modal de Gestão de Estoque */}
+            <EstoqueModal
+                open={openEstoqueModal}
+                handleClose={() => {
+                    setOpenEstoqueModal(false);
+                    setProdutoEstoqueSelecionado(null);
+                    // Recarregar produtos para atualizar estoque
+                    carregarProdutos();
+                }}
+                produto={produtoEstoqueSelecionado}
+            />
 
             {/* Modal de Confirmação de Exclusão */}
             <Dialog
                 open={openDeleteModal}
-                onClose={() => setOpenDeleteModal(false)}
+                onClose={() => !operationLoading && setOpenDeleteModal(false)}
             >
                 <DialogTitle>Confirmar Exclusão</DialogTitle>
                 <DialogContent>
@@ -392,15 +484,48 @@ const StockAdmin = () => {
                     </DialogContentText>
                 </DialogContent>
                 <DialogActions>
-                    <Button onClick={() => setOpenDeleteModal(false)}>Cancelar</Button>
-                    <Button onClick={confirmarExclusao} color="error" autoFocus>
-                        Excluir
+                    <Button 
+                        onClick={() => setOpenDeleteModal(false)}
+                        disabled={operationLoading}
+                    >
+                        Cancelar
+                    </Button>
+                    <Button 
+                        onClick={confirmarExclusao} 
+                        color="error" 
+                        autoFocus
+                        disabled={operationLoading}
+                        startIcon={operationLoading ? <CircularProgress size={16} /> : null}
+                    >
+                        {operationLoading ? 'Excluindo...' : 'Excluir'}
                     </Button>
                 </DialogActions>
             </Dialog>
+
+            {/* Snackbars para feedback */}
+            <Snackbar 
+                open={!!success} 
+                autoHideDuration={5000} 
+                onClose={() => setSuccess(null)}
+                anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+            >
+                <Alert onClose={() => setSuccess(null)} severity="success" sx={{ width: '100%' }}>
+                    {success}
+                </Alert>
+            </Snackbar>
+
+            <Snackbar 
+                open={!!error} 
+                autoHideDuration={8000} 
+                onClose={() => setError(null)}
+                anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+            >
+                <Alert onClose={() => setError(null)} severity="error" sx={{ width: '100%' }}>
+                    {error}
+                </Alert>
+            </Snackbar>
         </Box>
     );
 };
 
 export default StockAdmin;
-

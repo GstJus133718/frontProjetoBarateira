@@ -47,7 +47,7 @@ function AreaAdmin() {
         allowedRoles: ['admin', 'funcionario']
       },
       {
-        title: "Vendedores",
+        title: "Funcionários",
         icon: "../public/icons/sellers_icon.png",
         route: "/admin/vendedores",
         description: "Gerenciar vendedores",

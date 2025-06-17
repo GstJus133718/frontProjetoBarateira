@@ -233,15 +233,15 @@ const PromocoesDestaques = () => {
             }}
           >
             {produtosEmPromocaoFiltrados.map((produto) => {
-              const descontoNum = parseInt(produto.descontoPromocao?.replace(/[^\d]/g, '') || 0);
-              const temDescontoValido = descontoNum > 0;
-
-              const precoOriginalBase = limparEConverterPreco(produto.precoOriginalPromocao || produto.preco);
-              const precoFinalNum = calcularPrecoComDescontoSeguro(precoOriginalBase, produto);
+              // ✅ NOVO: Usar valor_real e economia dos novos campos da API
+              const precoFinalNum = produto.valor_real || limparEConverterPreco(produto.preco);
+              const precoOriginalNum = produto.preco_unitario || limparEConverterPreco(produto.preco);
+              const economia = produto.economia || 0;
+              const descontoPercentual = produto.desconto || 0;
 
               const precoFinalFormatado = formatarParaMoedaBRL(precoFinalNum);
-              const precoAntigoFormatado = formatarParaMoedaBRL(precoOriginalBase);
-              const mostrarPrecoAntigo = temDescontoValido && precoOriginalBase > precoFinalNum;
+              const precoAntigoFormatado = formatarParaMoedaBRL(precoOriginalNum);
+              const mostrarPrecoAntigo = economia > 0 && precoOriginalNum > precoFinalNum;
 
               return (
                 <Box
@@ -281,7 +281,7 @@ const PromocoesDestaques = () => {
                           </Typography>
                           <Box height={20} px={0.8} backgroundColor={"#F15A2B"} borderRadius={1} display={"flex"} alignItems={"center"} justifyContent={"center"}>
                             <Typography variant="caption" color="#fff" fontWeight="bold" textAlign={"center"}>
-                              -{descontoNum}%
+                              -{descontoPercentual}%
                             </Typography>
                           </Box>
                         </Box>
@@ -290,6 +290,13 @@ const PromocoesDestaques = () => {
                       <Typography variant="h6" fontWeight="bold" mt={mostrarPrecoAntigo ? 0.5 : 1.5} color={"#0C58A3"}>
                         {precoFinalFormatado}
                       </Typography>
+                      
+                      {/* ✅ NOVO: Mostrar economia */}
+                      {economia > 0 && (
+                        <Typography variant="caption" color="success.main" sx={{ fontWeight: 'bold', display: 'block', mt: 0.5 }}>
+                          Economize R$ {economia.toFixed(2).replace('.', ',')}
+                        </Typography>
+                      )}
                     </CardContent>
                   </Card>
                 </Box>
