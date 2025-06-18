@@ -6,74 +6,18 @@ import {
   CardContent,
   CardMedia,
   IconButton,
+  CircularProgress,
 } from "@mui/material";
 import { ArrowBackIos, ArrowForwardIos } from "@mui/icons-material";
 import { useNavigate } from "react-router-dom";
 
-// Simulação de dados - Usado apenas se o localStorage estiver vazio ou inválido
-const produtosMock = [
-  // ... (seu mock data aqui, se necessário como fallback)
-];
+// Importar serviço público de produtos
+import { produtoPublicoService } from './services/produtoPublicoService';
 
-// Função auxiliar para formatar moeda BRL
+// Função auxiliar para formatar preço
 const formatarParaMoedaBRL = (valorNum) => {
-    // Verifica se valorNum é um número válido
-    if (typeof valorNum !== 'number' || isNaN(valorNum)) {
-        // Tenta converter se for string
-        const num = limparEConverterPreco(valorNum);
-        if (isNaN(num)) return "R$ 0,00";
-        valorNum = num;
-    }
+    if (isNaN(valorNum)) return "R$ 0,00";
     return `R$ ${valorNum.toFixed(2)}`.replace(".", ",");
-};
-
-// Função auxiliar para limpar e converter preço para número
-const limparEConverterPreco = (precoStr) => {
-    if (typeof precoStr === 'number' && !isNaN(precoStr)) {
-        return precoStr; // Já é um número válido
-    }
-    if (typeof precoStr !== 'string') {
-        return 0; // Retorna 0 se não for string nem número
-    }
-    const valorLimpo = precoStr.replace(/[^\d,.-]/g, "").replace(",", ".");
-    const valorNum = parseFloat(valorLimpo);
-    return isNaN(valorNum) ? 0 : valorNum;
-};
-
-// Função segura para calcular preço com desconto
-const calcularPrecoComDescontoSeguro = (precoOriginal, promocaoInfo) => {
-    if (!promocaoInfo || typeof promocaoInfo !== 'object') {
-        return precoOriginal;
-    }
-
-    let precoComDesconto = precoOriginal;
-
-    // Tenta usar valorComDescontoPromocao (que veio de promocaoInfo.valorComDesconto)
-    if (promocaoInfo.valorComDescontoPromocao) {
-        const valorComDescontoNum = limparEConverterPreco(promocaoInfo.valorComDescontoPromocao);
-        if (valorComDescontoNum > 0 && valorComDescontoNum < precoOriginal) {
-            precoComDesconto = valorComDescontoNum;
-            return precoComDesconto;
-        }
-    }
-
-    // Tenta calcular pelo percentual (descontoPromocao veio de promocaoInfo.desconto)
-    if (promocaoInfo.descontoPromocao && typeof promocaoInfo.descontoPromocao === 'string') {
-        const percentualMatch = promocaoInfo.descontoPromocao.match(/(\d+)/);
-        if (percentualMatch) {
-            const percentual = parseFloat(percentualMatch[1]);
-            if (percentual > 0 && percentual < 100) {
-                const descontoValor = precoOriginal * (percentual / 100);
-                const precoCalculado = precoOriginal - descontoValor;
-                if (precoCalculado > 0 && precoCalculado < precoOriginal) {
-                    precoComDesconto = precoCalculado;
-                    return precoComDesconto;
-                }
-            }
-        }
-    }
-
-    return precoOriginal;
 };
 
 const PromocoesDestaques = () => {
@@ -81,94 +25,66 @@ const PromocoesDestaques = () => {
   const [showArrows, setShowArrows] = useState(false);
   const navigate = useNavigate();
   const [produtos, setProdutos] = useState([]);
-  const [promocoes, setPromocoes] = useState([]);
-  const [produtosEmPromocaoFiltrados, setProdutosEmPromocaoFiltrados] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  // Carrega produtos e promoções do localStorage na montagem
+  // Carregar produtos em promoção da API usando a rota específica
+  const carregarProdutosPromocao = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      console.log('Carregando produtos em promoção...');
+      
+      // Usar a rota exata que você mostrou
+      const filtros = {
+        page: 1,
+        limit: 20,
+        promocao: 'true',
+        order_by: 'nome',
+        order_dir: 'asc'
+      };
+      
+      const response = await produtoPublicoService.listar(filtros);
+      console.log('Response da API:', response);
+      
+      const produtosData = response.produtos || [];
+      
+      // Filtrar produtos que não são pediátricos
+      const produtosFiltrados = produtosData.filter(produto => 
+        produto.departamento && produto.departamento.toLowerCase() !== 'pediátricos'
+      );
+      
+      setProdutos(produtosFiltrados);
+      
+    } catch (error) {
+      console.error('Erro ao carregar produtos em promoção:', error);
+      setError('Erro ao carregar promoções.');
+      setProdutos([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    let produtosCarregados = produtosMock;
-    try {
-      const storedProdutos = localStorage.getItem("produtos");
-      if (storedProdutos) {
-        const parsed = JSON.parse(storedProdutos);
-        if (Array.isArray(parsed)) produtosCarregados = parsed;
-      }
-    } catch (error) {
-      console.error("[PromocoesDestaques] Erro ao carregar/parsear produtos:", error);
-    }
-    setProdutos(produtosCarregados);
-
-    let promocoesCarregadas = [];
-    try {
-      const storedPromocoes = localStorage.getItem("promocoes");
-      if (storedPromocoes) {
-        const parsed = JSON.parse(storedPromocoes);
-        if (Array.isArray(parsed)) promocoesCarregadas = parsed;
-      }
-    } catch (error) {
-      console.error("[PromocoesDestaques] Erro ao carregar/parsear promoções:", error);
-    }
-    setPromocoes(promocoesCarregadas);
-
+    carregarProdutosPromocao();
   }, []);
 
-  // Filtra os produtos que estão em promoção ativa e não são infantis
-  useEffect(() => {
-    const promocoesValidas = Array.isArray(promocoes) ? promocoes : [];
-    const produtosValidos = Array.isArray(produtos) ? produtos : [];
-
-    const promocoesAtivas = promocoesValidas.filter(p => p.status === "Ativo");
-
-    const promocoesAtivasMap = new Map();
-    promocoesAtivas.forEach(promo => {
-        if (promo.id != null) {
-             const promoIdNormalizado = String(promo.id);
-             // Se já existe uma promoção para este ID, não sobrescreva (ou decida qual manter)
-             // Por enquanto, a última encontrada para o ID prevalece.
-             promocoesAtivasMap.set(promoIdNormalizado, promo);
-        }
-    });
-
-    const produtosFiltrados = produtosValidos.filter(produto => {
-        if (produto.id == null) return false;
-        const produtoIdNormalizado = String(produto.id);
-        const temPromocaoAtiva = promocoesAtivasMap.has(produtoIdNormalizado);
-        const naoEhInfantil = produto.categoria?.toLowerCase() !== "produtos infantis";
-        return temPromocaoAtiva && naoEhInfantil;
-    });
-
-    const produtosComDetalhesPromocao = produtosFiltrados.map(produto => {
-        const produtoIdNormalizado = String(produto.id);
-        const promocaoInfo = promocoesAtivasMap.get(produtoIdNormalizado);
-
-        return {
-            ...produto,
-            descontoPromocao: promocaoInfo?.desconto,
-            valorComDescontoPromocao: promocaoInfo?.valorComDesconto,
-            precoOriginalPromocao: promocaoInfo?.valor
-        };
-    });
-
-    setProdutosEmPromocaoFiltrados(produtosComDetalhesPromocao);
-
-  }, [produtos, promocoes]);
-
-  // Verifica overflow para mostrar setas de rolagem
   useEffect(() => {
     const checkOverflow = () => {
       if (scrollRef.current) {
-        const isOverflowing =
-          scrollRef.current.scrollWidth > scrollRef.current.clientWidth;
+        const isOverflowing = scrollRef.current.scrollWidth > scrollRef.current.clientWidth;
         setShowArrows(isOverflowing);
       }
     };
-    const timer = setTimeout(checkOverflow, 150);
-    window.addEventListener("resize", checkOverflow);
-    return () => {
-        clearTimeout(timer);
-        window.removeEventListener("resize", checkOverflow);
+    
+    if (produtos.length > 0) {
+      setTimeout(checkOverflow, 100);
     }
-  }, [produtosEmPromocaoFiltrados]);
+    
+    window.addEventListener("resize", checkOverflow);
+    return () => window.removeEventListener("resize", checkOverflow);
+  }, [produtos]);
 
   const scroll = (direction) => {
     const { current } = scrollRef;
@@ -182,9 +98,31 @@ const PromocoesDestaques = () => {
   };
 
   const handleCardClick = (produtoId) => {
-    if (produtoId == null) return;
-    navigate(`/admin/product/${String(produtoId)}`);
+    navigate(`/admin/product/${produtoId}`);
   };
+
+  if (loading) {
+    return (
+      <Box sx={{ px: 4, py: 6, textAlign: 'center' }}>
+        <Typography variant="h5" fontWeight="bold" mb={4} color="#000">
+          Promoções Destaques
+        </Typography>
+        <CircularProgress />
+        <Typography sx={{ mt: 2 }}>Carregando promoções...</Typography>
+      </Box>
+    );
+  }
+
+  if (error) {
+    return (
+      <Box sx={{ px: 4, py: 6, textAlign: 'center' }}>
+        <Typography variant="h5" fontWeight="bold" mb={4} color="#000">
+          Promoções Destaques
+        </Typography>
+        <Typography color="error">{error}</Typography>
+      </Box>
+    );
+  }
 
   return (
     <Box sx={{ px: 4, py: 6, position: "relative" }}>
@@ -192,9 +130,9 @@ const PromocoesDestaques = () => {
         Promoções Destaques
       </Typography>
 
-      {produtosEmPromocaoFiltrados.length === 0 ? (
+      {produtos.length === 0 ? (
         <Typography variant="body1" color="text.secondary" textAlign="center">
-          Em breve novidades
+          Nenhuma promoção ativa no momento
         </Typography>
       ) : (
         <>
@@ -205,7 +143,7 @@ const PromocoesDestaques = () => {
                 sx={{
                   position: "absolute", top: "50%", left: 0, transform: "translateY(-50%)",
                   backgroundColor: "rgba(255, 255, 255, 0.8)", boxShadow: 1, zIndex: 1,
-                  "&:hover": { backgroundColor: "#fff" }, mt: -3
+                  "&:hover": { backgroundColor: "#fff" }
                 }}
               >
                 <ArrowBackIos sx={{ pl: 0.5 }} />
@@ -215,7 +153,7 @@ const PromocoesDestaques = () => {
                 sx={{
                   position: "absolute", top: "50%", right: 0, transform: "translateY(-50%)",
                   backgroundColor: "rgba(255, 255, 255, 0.8)", boxShadow: 1, zIndex: 1,
-                  "&:hover": { backgroundColor: "#fff" }, mt: -3
+                  "&:hover": { backgroundColor: "#fff" }
                 }}
               >
                 <ArrowForwardIos />
@@ -232,17 +170,7 @@ const PromocoesDestaques = () => {
               "&::-webkit-scrollbar": { display: "none" },
             }}
           >
-            {produtosEmPromocaoFiltrados.map((produto) => {
-              // ✅ NOVO: Usar valor_real e economia dos novos campos da API
-              const precoFinalNum = produto.valor_real || limparEConverterPreco(produto.preco);
-              const precoOriginalNum = produto.preco_unitario || limparEConverterPreco(produto.preco);
-              const economia = produto.economia || 0;
-              const descontoPercentual = produto.desconto || 0;
-
-              const precoFinalFormatado = formatarParaMoedaBRL(precoFinalNum);
-              const precoAntigoFormatado = formatarParaMoedaBRL(precoOriginalNum);
-              const mostrarPrecoAntigo = economia > 0 && precoOriginalNum > precoFinalNum;
-
+            {produtos.map((produto) => {
               return (
                 <Box
                   key={produto.id}
@@ -258,9 +186,8 @@ const PromocoesDestaques = () => {
                   >
                     <CardMedia
                       component="img"
-                      image={produto.imagem || produto.imagens?.[0] || "/icons/product_icon.svg"}
+                      image="/icons/product_icon.svg"
                       alt={produto.nome}
-                      onError={(e) => e.target.src = "/icons/product_icon.svg"}
                       sx={{ height: 100, width: "auto", margin: "0 auto", objectFit: "contain", mb: 1 }}
                     />
                     <CardContent sx={{ flexGrow: 1, p: 1 }}>
@@ -271,30 +198,32 @@ const PromocoesDestaques = () => {
                         {produto.nome}
                       </Typography>
                       <Typography variant="caption" color="text.secondary" display="block" gutterBottom>
-                        {produto.marca || "Marca não informada"}
+                        {produto.marca}
                       </Typography>
 
-                      {mostrarPrecoAntigo && (
+                      {/* Preço original riscado + Badge desconto */}
+                      {produto.desconto > 0 && (
                         <Box display="flex" justifyContent="center" alignItems="center" gap={1} mt={0.5} mb={0.5}>
                           <Typography variant="caption" color="text.secondary" sx={{ textDecoration: "line-through" }}>
-                            {precoAntigoFormatado}
+                            {formatarParaMoedaBRL(produto.preco_unitario)}
                           </Typography>
                           <Box height={20} px={0.8} backgroundColor={"#F15A2B"} borderRadius={1} display={"flex"} alignItems={"center"} justifyContent={"center"}>
-                            <Typography variant="caption" color="#fff" fontWeight="bold" textAlign={"center"}>
-                              -{descontoPercentual}%
+                            <Typography variant="caption" color="#fff" fontWeight="bold">
+                              -{produto.desconto}%
                             </Typography>
                           </Box>
                         </Box>
                       )}
 
-                      <Typography variant="h6" fontWeight="bold" mt={mostrarPrecoAntigo ? 0.5 : 1.5} color={"#0C58A3"}>
-                        {precoFinalFormatado}
+                      {/* Preço final */}
+                      <Typography variant="h6" fontWeight="bold" mt={produto.desconto > 0 ? 0.5 : 1.5} color={"#0C58A3"}>
+                        {formatarParaMoedaBRL(produto.valor_real)}
                       </Typography>
                       
-                      {/* ✅ NOVO: Mostrar economia */}
-                      {economia > 0 && (
+                      {/* Economia */}
+                      {produto.economia > 0 && (
                         <Typography variant="caption" color="success.main" sx={{ fontWeight: 'bold', display: 'block', mt: 0.5 }}>
-                          Economize R$ {economia.toFixed(2).replace('.', ',')}
+                          Economize R$ {produto.economia.toFixed(2).replace('.', ',')}
                         </Typography>
                       )}
                     </CardContent>
@@ -310,4 +239,3 @@ const PromocoesDestaques = () => {
 };
 
 export default PromocoesDestaques;
-

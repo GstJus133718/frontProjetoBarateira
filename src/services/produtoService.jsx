@@ -1,13 +1,24 @@
 import api from '../api/client';
 
 export const produtoService = {
-  // Listar todos os produtos
-  listar: async () => {
+  // Listar todos os produtos com paginação
+  listar: async (page = 1, limit = 20) => {
     try {
-      const response = await api.get('/admin/produtos');
+      const response = await api.get(`/admin/produtos?page=${page}&limit=${limit}`);
       return response.data;
     } catch (error) {
       console.error('Erro ao listar produtos:', error);
+      throw error;
+    }
+  },
+
+  // Listar TODOS os produtos (sem paginação) - para busca
+  listarTodos: async () => {
+    try {
+      const response = await api.get('/admin/produtos?limit=1000'); // Limite alto para pegar todos
+      return response.data;
+    } catch (error) {
+      console.error('Erro ao listar todos os produtos:', error);
       throw error;
     }
   },

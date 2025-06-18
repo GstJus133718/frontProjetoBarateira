@@ -20,6 +20,7 @@ import {
     CircularProgress,
     Alert,
     Snackbar,
+    Pagination, 
     Chip
 } from "@mui/material";
 import SearchIcon from "@mui/icons-material/Search";
@@ -33,6 +34,7 @@ import EstoqueModal from "./EstoqueModal";
 import { produtoService } from './services/produtoService';
 
 const StockAdmin = () => {
+    // Estados existentes
     const [produtos, setProdutos] = useState([]);
     const [busca, setBusca] = useState("");
     const [openModal, setOpenModal] = useState(false);
@@ -51,21 +53,32 @@ const StockAdmin = () => {
     const [error, setError] = useState(null);
     const [success, setSuccess] = useState(null);
     
+    // ✅ Novos estados para paginação
+    const [paginaAtual, setPaginaAtual] = useState(1);
+    const [totalPaginas, setTotalPaginas] = useState(1);
+    const [totalProdutos, setTotalProdutos] = useState(0);
+    const [limitePorPagina] = useState(20);
+    
     const navigate = useNavigate();
 
-    // Carregar produtos da API
-    const carregarProdutos = async () => {
+    // Carregar produtos da API com paginação
+    const carregarProdutos = async (pagina = 1) => {
         try {
             setLoading(true);
             setError(null);
-            const response = await produtoService.listar();
+            
+            console.log(`Carregando produtos da página ${pagina}...`);
+            const response = await produtoService.listar(pagina, limitePorPagina);
             
             console.log('Response da API produtos:', response);
             
-            // Extrair os produtos da resposta
+            // Extrair os produtos e informações de paginação da resposta
             let produtosData = [];
+            let paginacao = {};
+            
             if (response && response.produtos && Array.isArray(response.produtos)) {
                 produtosData = response.produtos;
+                paginacao = response.pagination || {};
             } else if (Array.isArray(response)) {
                 produtosData = response;
             }
@@ -93,6 +106,12 @@ const StockAdmin = () => {
             }));
             
             setProdutos(produtosFormatados);
+            
+            // ✅ Atualizar estados de paginação
+            setPaginaAtual(paginacao.page || pagina);
+            setTotalPaginas(paginacao.total_pages || 1);
+            setTotalProdutos(paginacao.total || produtosFormatados.length);
+            
         } catch (error) {
             console.error('Erro ao carregar produtos:', error);
             setError('Erro ao carregar lista de produtos. Tente novamente.');
@@ -102,9 +121,16 @@ const StockAdmin = () => {
         }
     };
 
+    // ✅ Função para mudar de página
+    const handleMudarPagina = (event, novaPagina) => {
+        if (novaPagina !== paginaAtual) {
+            carregarProdutos(novaPagina);
+        }
+    };
+
     // Carregar produtos ao montar o componente
     useEffect(() => {
-        carregarProdutos();
+        carregarProdutos(1);
     }, []);
 
     // Auto-fechar mensagens de sucesso e erro
@@ -317,16 +343,28 @@ const StockAdmin = () => {
                         </Button>
                     </Box>
                 </Box>
-
-                {/* Debug: Mostrar quantidade de produtos carregados */}
-                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                    {produtos.length} produto(s) carregado(s)
-                </Typography>
+                {/* ✅ Informações de paginação */}
+                <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
+                    <Typography variant="body2" color="text.secondary">
+                        {totalProdutos} produto(s) total | Página {paginaAtual} de {totalPaginas}
+                        {busca && ` | Filtrando por: "${busca}"`}
+                    </Typography>
+                    
+                    {/* ✅ Paginação */}
+                    <Pagination
+                        count={totalPaginas}
+                        page={paginaAtual}
+                        onChange={handleMudarPagina}
+                        color="primary"
+                        disabled={loading}
+                        showFirstButton
+                        showLastButton
+                    />
+                </Box>
 
                 {/* Tabela */}
                 <TableContainer component={Paper}>
                     <Table>
-                        
                         <TableHead>
                             <TableRow>
                                 <TableCell>ID</TableCell>
@@ -429,9 +467,9 @@ const StockAdmin = () => {
                                 ))
                             ) : (
                                 <TableRow>
-                                    <TableCell colSpan={10} align="center">
+                                    <TableCell colSpan={12} align="center">
                                         <Typography variant="body2" color="text.secondary">
-                                            {busca ? 'Nenhum produto encontrado com os filtros aplicados.' : 'Nenhum produto cadastrado.'}
+                                            {busca ? 'Nenhum produto encontrado com os filtros aplicados.' : 'Nenhum produto cadastrado nesta página.'}
                                         </Typography>
                                     </TableCell>
                                 </TableRow>
@@ -439,6 +477,20 @@ const StockAdmin = () => {
                         </TableBody>
                     </Table>
                 </TableContainer>
+
+                {/* ✅ Paginação inferior */}
+                <Box sx={{ display: "flex", justifyContent: "center", mt: 3 }}>
+                    <Pagination
+                        count={totalPaginas}
+                        page={paginaAtual}
+                        onChange={handleMudarPagina}
+                        color="primary"
+                        disabled={loading}
+                        showFirstButton
+                        showLastButton
+                        size="large"
+                    />
+                </Box>
             </Box>
 
             {/* Modal de Adição */}

@@ -6,21 +6,26 @@ import {
   CardContent,
   CardMedia,
   IconButton,
+  CircularProgress,
 } from "@mui/material";
 import { ArrowBackIos, ArrowForwardIos } from "@mui/icons-material";
 import { useNavigate } from "react-router-dom";
 
-// Simulação de dados - Em um app real, viria do localStorage ou API
+// Importar serviço público de produtos
+import { produtoPublicoService } from './services/produtoPublicoService';
+
+// Simulação de dados - Usado apenas se a API falhar
 const produtosMock = [
   {
-    id: "7", // IDs diferentes dos outros mocks para evitar conflito
+    id: "7",
     nome: "Produto Infantil 1",
     marca: "Marca Kids A",
     imagem: "/icons/product_icon.svg",
     precoAntigo: 49.90,
     desconto: 15,
     preco: "R$ 42,41",
-    categoria: "Produtos Infantis", // Categoria correta
+    categoria: "Produtos Infantis",
+    departamento: "Pediátricos",
   },
   {
     id: "8",
@@ -31,6 +36,7 @@ const produtosMock = [
     desconto: 0,
     preco: "R$ 79,90",
     categoria: "Produtos Infantis",
+    departamento: "Pediátricos",
   },
   {
     id: "9",
@@ -41,20 +47,11 @@ const produtosMock = [
     desconto: 5,
     preco: "R$ 33,25",
     categoria: "Produtos Infantis",
-  },
-   {
-    id: "10",
-    nome: "Outro Produto", // Produto de outra categoria para teste de filtro
-    marca: "Marca Outra",
-    imagem: "/icons/product_icon.svg",
-    precoAntigo: 100.00,
-    desconto: 10,
-    preco: "R$ 90,00",
-    categoria: "Outra Categoria",
-  },
+    departamento: "Pediátricos",
+  }
 ];
 
-// --- Funções Auxiliares (Copiar/Importar de Cards_sintaxe_corrigida.jsx ou definir aqui) ---
+// Funções auxiliares
 const formatarParaMoedaBRL = (valorNum) => {
     if (isNaN(valorNum)) return "R$ 0,00";
     return `R$ ${valorNum.toFixed(2)}`.replace(".", ",");
@@ -69,34 +66,89 @@ const limparEConverterPreco = (precoStr) => {
     const valorNum = parseFloat(valorLimpo);
     return isNaN(valorNum) ? 0 : valorNum;
 };
-// --- Fim Funções Auxiliares ---
 
 const ProdutosInfantis = () => {
   const scrollRef = useRef(null);
   const [showArrows, setShowArrows] = useState(false);
   const navigate = useNavigate();
   const [produtos, setProdutos] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  // Carregar produtos pediátricos da API
+  const carregarProdutosPediatricos = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      console.log('Carregando produtos pediátricos da API...');
+      const response = await produtoPublicoService.listarProdutosPediatricos(1, 50); // Carregar até 50 produtos
+      
+      console.log('Response da API produtos pediátricos:', response);
+      
+      // Extrair dados da resposta
+      const produtosData = response.produtos || [];
+      
+      // Formatar produtos para exibição
+      const produtosFormatados = produtosData.map(produto => ({
+        id: produto.id,
+        nome: produto.nome || '',
+        marca: produto.marca || 'Marca não informada',
+        principio_ativo: produto.principio_ativo || '',
+        departamento: produto.departamento || '',
+        categoria: 'Produtos Infantis', // Para compatibilidade
+        preco_unitario: produto.preco_unitario || 0,
+        valor_real: produto.valor_real || produto.preco_unitario || 0,
+        economia: produto.economia || 0,
+        em_promocao: produto.em_promocao || false,
+        desconto: produto.desconto || 0,
+        generico: produto.generico || false,
+        // Para compatibilidade com display
+        preco: formatarParaMoedaBRL(produto.valor_real || produto.preco_unitario || 0),
+        imagens: produto.imagens || [],
+        // Campos para compatibilidade com estrutura antiga
+        precoAntigo: produto.preco_unitario || 0,
+        imagem: produto.imagens?.[0] || "/icons/product_icon.svg",
+        ...produto
+      }));
+      
+      setProdutos(produtosFormatados);
+      
+    } catch (error) {
+      console.error('Erro ao carregar produtos pediátricos da API:', error);
+      
+      // Fallback: tentar carregar do localStorage
+      console.log('Tentando fallback do localStorage...');
+      try {
+        const storedProdutos = localStorage.getItem("produtos");
+        let todosProdutos = [];
+        
+        if (storedProdutos) {
+          todosProdutos = JSON.parse(storedProdutos);
+        } else {
+          todosProdutos = produtosMock;
+        }
+        
+        // Filtrar produtos pediátricos/infantis
+        const produtosFiltrados = todosProdutos.filter(p => 
+          (p.departamento && p.departamento.toLowerCase() === "pediátricos") ||
+          (p.categoria && p.categoria.toLowerCase() === "produtos infantis")
+        );
+        
+        setProdutos(produtosFiltrados);
+        
+      } catch (fallbackError) {
+        console.error('Erro no fallback:', fallbackError);
+        setError('Erro ao carregar produtos infantis.');
+        setProdutos(produtosMock); // Usar mock como último recurso
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    // Carrega todos os produtos
-    const storedProdutos = localStorage.getItem("produtos");
-    let todosProdutos = [];
-    if (storedProdutos) {
-      try {
-        todosProdutos = JSON.parse(storedProdutos);
-      } catch (error) {
-        console.error("Erro ao carregar produtos do localStorage:", error);
-        todosProdutos = produtosMock;
-      }
-    } else {
-      todosProdutos = produtosMock;
-    }
-    // Filtra pela categoria "Produtos Infantis" (case-insensitive)
-    const produtosFiltrados = todosProdutos.filter(
-        p => p.categoria && p.categoria.toLowerCase() === "produtos infantis"
-    );
-    setProdutos(produtosFiltrados);
-
+    carregarProdutosPediatricos();
   }, []);
 
   useEffect(() => {
@@ -107,9 +159,11 @@ const ProdutosInfantis = () => {
         setShowArrows(isOverflowing);
       }
     };
+    
     if (produtos.length > 0) {
-        setTimeout(checkOverflow, 100);
+      setTimeout(checkOverflow, 100);
     }
+    
     window.addEventListener("resize", checkOverflow);
     return () => window.removeEventListener("resize", checkOverflow);
   }, [produtos]);
@@ -126,9 +180,31 @@ const ProdutosInfantis = () => {
   };
 
   const handleCardClick = (produtoId) => {
-    // Navega para a página de detalhes do produto
     navigate(`/admin/product/${produtoId}`);
   };
+
+  if (loading) {
+    return (
+      <Box sx={{ px: 4, py: 6, textAlign: 'center' }}>
+        <Typography variant="h5" fontWeight="bold" mb={4} color="#000">
+          Produtos Infantis
+        </Typography>
+        <CircularProgress />
+        <Typography sx={{ mt: 2 }}>Carregando produtos infantis...</Typography>
+      </Box>
+    );
+  }
+
+  if (error) {
+    return (
+      <Box sx={{ px: 4, py: 6, textAlign: 'center' }}>
+        <Typography variant="h5" fontWeight="bold" mb={4} color="#000">
+          Produtos Infantis
+        </Typography>
+        <Typography color="error">{error}</Typography>
+      </Box>
+    );
+  }
 
   return (
     <Box sx={{ px: 4, py: 6, position: "relative" }}>
@@ -185,142 +261,147 @@ const ProdutosInfantis = () => {
           scrollBehavior: "smooth",
           scrollbarWidth: "none",
           "&::-webkit-scrollbar": { display: "none" },
-          minHeight: produtos.length === 0 ? 'auto' : 350 // Altura mínima para evitar colapso
+          minHeight: produtos.length === 0 ? 'auto' : 350
         }}
       >
         {produtos.length === 0 ? (
-            <Typography sx={{ width: '100%', textAlign: 'center', py: 5 }}>
-                Nenhum produto infantil encontrado.
-            </Typography>
+          <Typography sx={{ width: '100%', textAlign: 'center', py: 5 }}>
+            Nenhum produto infantil encontrado.
+          </Typography>
         ) : (
-            produtos.map((produto) => {
-              const precoAntigoNum = limparEConverterPreco(produto.precoAntigo);
-              const descontoNum = parseFloat(produto.desconto) || 0;
-              const temDescontoValido = descontoNum > 0 && !isNaN(precoAntigoNum) && precoAntigoNum > 0;
+          produtos.map((produto) => {
+            // ✅ NOVO: Usar campos da API (valor_real, economia, desconto)
+            const precoFinalNum = produto.valor_real || produto.preco_unitario || limparEConverterPreco(produto.preco);
+            const precoOriginalNum = produto.preco_unitario || limparEConverterPreco(produto.precoAntigo || produto.preco);
+            const economia = produto.economia || 0;
+            const descontoNum = produto.desconto || parseFloat(produto.desconto) || 0;
+            
+            const temDescontoValido = (produto.em_promocao && economia > 0) || (descontoNum > 0 && precoOriginalNum > precoFinalNum);
+            
+            const precoFinalFormatado = formatarParaMoedaBRL(precoFinalNum);
+            const precoAntigoFormatado = formatarParaMoedaBRL(precoOriginalNum);
 
-              const precoFinalNum = temDescontoValido 
-                  ? precoAntigoNum * (1 - descontoNum / 100) 
-                  : limparEConverterPreco(produto.preco);
-              
-              const precoFinalFormatado = formatarParaMoedaBRL(precoFinalNum);
-              const precoAntigoFormatado = formatarParaMoedaBRL(precoAntigoNum);
-
-              return (
-                <Box
-                  key={produto.id}
+            return (
+              <Box
+                key={produto.id}
+                sx={{
+                  minWidth: 220,
+                  maxWidth: 220,
+                  scrollSnapAlign: "start",
+                  flexShrink: 0,
+                  cursor: "pointer",
+                }}
+                onClick={() => handleCardClick(produto.id)}
+              >
+                <Card
                   sx={{
-                    minWidth: 220,
-                    maxWidth: 220,
-                    scrollSnapAlign: "start",
-                    flexShrink: 0,
-                    cursor: "pointer",
+                    textAlign: "center",
+                    padding: 2,
+                    boxShadow: "0px 2px 8px rgba(0, 0, 0, 0.1)",
+                    height: "100%",
+                    display: "flex",
+                    flexDirection: "column",
+                    justifyContent: "space-between",
+                    borderRadius: 2,
                   }}
-                  onClick={() => handleCardClick(produto.id)}
                 >
-                  {/* --- CARD PADRONIZADO (igual ao Cards_sintaxe_corrigida.jsx) --- */}
-                  <Card
+                  <CardMedia
+                    component="img"
+                    image={produto.imagem || produto.imagens?.[0] || "/icons/product_icon.svg"}
+                    alt={produto.nome}
+                    onError={(e) => e.target.src = "/icons/product_icon.svg"}
                     sx={{
-                      textAlign: "center",
-                      padding: 2,
-                      boxShadow: "0px 2px 8px rgba(0, 0, 0, 0.1)",
-                      height: "100%",
-                      display: "flex",
-                      flexDirection: "column",
-                      justifyContent: "space-between",
-                      borderRadius: 2,
+                      height: 100,
+                      width: "auto",
+                      margin: "0 auto",
+                      objectFit: "contain",
+                      mb: 1,
                     }}
-                  >
-                    <CardMedia
-                      component="img"
-                      image={produto.imagem || "/icons/product_icon.svg"}
-                      alt={produto.nome}
-                      onError={(e) => e.target.src = "/icons/product_icon.svg"}
-                      sx={{
-                        height: 100,
-                        width: "auto",
-                        margin: "0 auto",
-                        objectFit: "contain",
-                        mb: 1,
+                  />
+
+                  <CardContent sx={{ flexGrow: 1, p: 1 }}>
+                    <Typography
+                      variant="body1"
+                      fontWeight="bold"
+                      gutterBottom
+                      sx={{ 
+                        minHeight: "2.5em",
+                        lineHeight: 1.25,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        display: "-webkit-box",
+                        WebkitLineClamp: 2,
+                        WebkitBoxOrient: "vertical"
                       }}
-                    />
+                    >
+                      {produto.nome}
+                    </Typography>
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      display="block"
+                      gutterBottom
+                    >
+                      {produto.marca || "Marca não informada"}
+                    </Typography>
 
-                    <CardContent sx={{ flexGrow: 1, p: 1 }}>
-                      <Typography
-                        variant="body1"
-                        fontWeight="bold"
-                        gutterBottom
-                        sx={{ 
-                            minHeight: "2.5em",
-                            lineHeight: 1.25,
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            display: "-webkit-box",
-                            WebkitLineClamp: 2,
-                            WebkitBoxOrient: "vertical"
-                        }}
+                    {temDescontoValido && (
+                      <Box
+                        display="flex"
+                        justifyContent="center"
+                        alignItems="center"
+                        gap={1}
+                        mt={0.5}
+                        mb={0.5}
                       >
-                        {produto.nome}
-                      </Typography>
-                      <Typography
-                        variant="caption"
-                        color="text.secondary"
-                        display="block"
-                        gutterBottom
-                      >
-                        {produto.marca || "Marca não informada"}
-                      </Typography>
-
-                      {temDescontoValido && (
+                        <Typography
+                          variant="caption"
+                          color="text.secondary"
+                          sx={{ textDecoration: "line-through" }}
+                        >
+                          {precoAntigoFormatado}
+                        </Typography>
                         <Box
-                          display="flex"
-                          justifyContent="center"
-                          alignItems="center"
-                          gap={1}
-                          mt={0.5}
-                          mb={0.5}
+                          height={20}
+                          px={0.8}
+                          backgroundColor={"#F15A2B"}
+                          borderRadius={1}
+                          display={"flex"}
+                          alignItems={"center"}
+                          justifyContent={"center"}
                         >
                           <Typography
                             variant="caption"
-                            color="text.secondary"
-                            sx={{ textDecoration: "line-through" }}
+                            color="#fff"
+                            fontWeight="bold"
+                            textAlign={"center"}
                           >
-                            {precoAntigoFormatado}
+                            -{descontoNum}%
                           </Typography>
-                          <Box
-                            height={20}
-                            px={0.8}
-                            backgroundColor={"#F15A2B"}
-                            borderRadius={1}
-                            display={"flex"}
-                            alignItems={"center"}
-                            justifyContent={"center"}
-                          >
-                            <Typography
-                              variant="caption"
-                              color="#fff"
-                              fontWeight="bold"
-                              textAlign={"center"}
-                            >
-                              -{descontoNum}%
-                            </Typography>
-                          </Box>
                         </Box>
-                      )}
+                      </Box>
+                    )}
 
-                      <Typography
-                        variant="h6"
-                        fontWeight="bold"
-                        mt={temDescontoValido ? 0.5 : 1.5}
-                        color={"#0C58A3"}
-                      >
-                        {precoFinalFormatado}
+                    <Typography
+                      variant="h6"
+                      fontWeight="bold"
+                      mt={temDescontoValido ? 0.5 : 1.5}
+                      color={"#0C58A3"}
+                    >
+                      {precoFinalFormatado}
+                    </Typography>
+                    
+                    {/* ✅ NOVO: Mostrar economia */}
+                    {economia > 0 && (
+                      <Typography variant="caption" color="success.main" sx={{ fontWeight: 'bold', display: 'block', mt: 0.5 }}>
+                        Economize R$ {economia.toFixed(2).replace('.', ',')}
                       </Typography>
-                    </CardContent>
-                  </Card>
-                  {/* --- FIM CARD PADRONIZADO --- */}
-                </Box>
-              );
-            })
+                    )}
+                  </CardContent>
+                </Card>
+              </Box>
+            );
+          })
         )}
       </Box>
     </Box>
@@ -328,4 +409,3 @@ const ProdutosInfantis = () => {
 };
 
 export default ProdutosInfantis;
-

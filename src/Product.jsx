@@ -22,6 +22,9 @@ import FavoriteBorderIcon from "@mui/icons-material/FavoriteBorder";
 import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import { useNavigate, useParams } from "react-router-dom";
 
+// Importar serviço público de produtos
+import { produtoPublicoService } from './services/produtoPublicoService';
+
 // Mock data (manter para fallback)
 const produtosMock = [
     // ... (mock data mantido como fallback)
@@ -47,84 +50,119 @@ const formatarParaMoedaBRL = (valorNum) => {
 const Product = () => {
     const { id } = useParams();
     const [produto, setProduto] = useState(null);
-    const [promocaoAtiva, setPromocaoAtiva] = useState(null); // Estado para guardar info da promoção ativa
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [imagemPrincipal, setImagemPrincipal] = useState(0);
     const navigate = useNavigate();
 
     useEffect(() => {
-        setLoading(true);
-        setError(null);
-        setProduto(null);
-        setPromocaoAtiva(null); // Resetar promoção ativa
-        setImagemPrincipal(0);
+        const carregarProduto = async () => {
+            setLoading(true);
+            setError(null);
+            setProduto(null);
+            setImagemPrincipal(0);
 
-        const storedProdutosStr = localStorage.getItem("produtos");
-        const storedPromocoesStr = localStorage.getItem("promocoes"); // <<< Buscar promoções
-
-        let todosProdutos = [];
-        let todasPromocoes = [];
-
-        // Carregar Produtos
-        if (storedProdutosStr) {
             try {
-                todosProdutos = JSON.parse(storedProdutosStr);
-                // Adaptação para estrutura antiga (se necessário)
-                todosProdutos = todosProdutos.map(p => {
-                    if (!p.disponibilidadeFiliais && p.estoque !== undefined && p.filial) {
-                        return { ...p, disponibilidadeFiliais: [{ filial: p.filial, quantidade: p.estoque }] };
-                    }
-                    if (!Array.isArray(p.disponibilidadeFiliais)) {
-                         p.disponibilidadeFiliais = [];
-                    }
-                    return p;
-                });
-            } catch (e) {
-                console.error("Erro ao parsear produtos do localStorage:", e);
-                todosProdutos = produtosMock;
-            }
-        } else {
-            todosProdutos = produtosMock;
-        }
-
-        // Carregar Promoções
-        if (storedPromocoesStr) {
-            try {
-                todasPromocoes = JSON.parse(storedPromocoesStr);
-            } catch (e) {
-                console.error("Erro ao parsear promoções do localStorage:", e);
-                // Não usar mock para promoções, apenas array vazio
-            }
-        }
-
-        // Encontrar Produto
-        const produtoEncontrado = todosProdutos.find(p => String(p.id) === String(id));
-
-        if (produtoEncontrado) {
-            // Garantir que disponibilidadeFiliais exista
-            if (!Array.isArray(produtoEncontrado.disponibilidadeFiliais)) {
-                produtoEncontrado.disponibilidadeFiliais = [];
-            }
-
-            // <<< Verificar se há promoção ATIVA para este produto
-            const promocaoDoProduto = todasPromocoes.find(promo => 
-                String(promo.id) === String(produtoEncontrado.id) && promo.status === "Ativo"
-            );
-
-            setTimeout(() => {
-                setProduto(produtoEncontrado);
-                if (promocaoDoProduto) {
-                    setPromocaoAtiva(promocaoDoProduto); // Guarda a promoção ativa
+                console.log('Carregando produto da API pública, ID:', id);
+                
+                // Buscar produto da API pública
+                const response = await produtoPublicoService.buscarPorId(id);
+                console.log('Response da API produto público:', response);
+                
+                // Extrair dados do produto
+                let produtoData = null;
+                if (response && response.produto) {
+                    produtoData = response.produto;
+                } else if (response) {
+                    produtoData = response;
                 }
+                
+                if (produtoData) {
+                    // Formatar produto da API para o frontend
+                    const produtoFormatado = {
+                        id: produtoData.id,
+                        nome: produtoData.nome || '',
+                        marca: produtoData.marca || 'Marca não informada',
+                        principio_ativo: produtoData.principio_ativo || '',
+                        departamento: produtoData.departamento || '',
+                        categoria: produtoData.departamento || '', // Para compatibilidade
+                        preco_unitario: produtoData.preco_unitario || 0,
+                        valor_real: produtoData.valor_real || produtoData.preco_unitario || 0,
+                        economia: produtoData.economia || 0,
+                        em_promocao: produtoData.em_promocao || false,
+                        desconto: produtoData.desconto || 0,
+                        generico: produtoData.generico || false,
+                        // Para compatibilidade com display
+                        preco: formatarParaMoedaBRL(produtoData.valor_real || produtoData.preco_unitario || 0),
+                        descricao: produtoData.descricao || "Sem descrição disponível.",
+                        imagens: produtoData.imagens || [],
+                        // Disponibilidade por filial
+                        disponibilidadeFiliais: response.disponivel_em ? 
+                            response.disponivel_em.map(filial => ({
+                                filial: filial.filial_nome,
+                                quantidade: filial.quantidade,
+                                disponivel: filial.disponivel
+                            })) : [],
+                        // Manter dados originais
+                        ...produtoData
+                    };
+                    
+                    setProduto(produtoFormatado);
+                } else {
+                    throw new Error('Produto não encontrado na API');
+                }
+                
+            } catch (error) {
+                console.error('Erro ao carregar produto da API:', error);
+                
+                // Fallback: tentar carregar do localStorage
+                console.log('Tentando fallback do localStorage...');
+                
+                try {
+                    const storedProdutosStr = localStorage.getItem("produtos");
+                    let todosProdutos = [];
+
+                    if (storedProdutosStr) {
+                        todosProdutos = JSON.parse(storedProdutosStr);
+                        // Adaptação para estrutura antiga (se necessário)
+                        todosProdutos = todosProdutos.map(p => {
+                            if (!p.disponibilidadeFiliais && p.estoque !== undefined && p.filial) {
+                                return { ...p, disponibilidadeFiliais: [{ filial: p.filial, quantidade: p.estoque }] };
+                            }
+                            if (!Array.isArray(p.disponibilidadeFiliais)) {
+                                 p.disponibilidadeFiliais = [];
+                            }
+                            return p;
+                        });
+                    } else {
+                        todosProdutos = produtosMock;
+                    }
+
+                    // Encontrar Produto no localStorage
+                    const produtoEncontrado = todosProdutos.find(p => String(p.id) === String(id));
+
+                    if (produtoEncontrado) {
+                        // Garantir que disponibilidadeFiliais exista
+                        if (!Array.isArray(produtoEncontrado.disponibilidadeFiliais)) {
+                            produtoEncontrado.disponibilidadeFiliais = [];
+                        }
+                        setProduto(produtoEncontrado);
+                    } else {
+                        throw new Error('Produto não encontrado');
+                    }
+                    
+                } catch (fallbackError) {
+                    console.error('Erro no fallback:', fallbackError);
+                    setError("Produto não encontrado.");
+                }
+            } finally {
                 setLoading(false);
-            }, 300); 
+            }
+        };
 
-        } else {
-            setError("Produto não encontrado.");
-            setLoading(false);
+        if (id) {
+            carregarProduto();
         }
-
     }, [id]);
 
     const handleImagemClick = (index) => setImagemPrincipal(index);
@@ -161,8 +199,8 @@ const Product = () => {
         );
     }
 
-    // <<< Determinar preços e desconto com base na promoção ativa
-    let precoFinal = produto.valor_real ? formatarParaMoedaBRL(produto.valor_real) : (produto.preco || "R$ 0,00");
+    // Determinar preços e desconto com base nos novos campos da API
+    let precoFinal = formatarParaMoedaBRL(produto.valor_real || produto.preco_unitario || 0);
     let precoAntigo = null;
     let descontoPercentual = produto.desconto || 0;
     let economia = produto.economia || 0;
@@ -187,7 +225,7 @@ const Product = () => {
             <Box sx={{ p: 3, maxWidth: 900, mx: "auto" }}>
                 {/* Breadcrumbs */}
                 <Typography variant="body2" sx={{ mb: 2, color: "text.secondary" }}>
-                    Home &gt; {produto.categoria || "Categoria"} &gt; {produto.nome}
+                    Home &gt; {produto.categoria || produto.departamento || "Categoria"} &gt; {produto.nome}
                 </Typography>
 
                 {/* Card Único do Produto */}
@@ -224,10 +262,24 @@ const Product = () => {
                         <Typography variant="h5" component="h1" sx={{ mb: 0.5 }}>{produto.nome}</Typography>
                         <Typography variant="body1" color="text.secondary" sx={{ mb: 1.5 }}>{produto.marca || "Marca não informada"}</Typography>
                         
+                        {/* Princípio Ativo */}
+                        {produto.principio_ativo && (
+                            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                                <strong>Princípio Ativo:</strong> {produto.principio_ativo}
+                            </Typography>
+                        )}
+                        
+                        {/* Genérico */}
+                        {produto.generico && (
+                            <Typography variant="body2" color="info.main" sx={{ mb: 1, fontWeight: 'bold' }}>
+                                💊 Medicamento Genérico
+                            </Typography>
+                        )}
+                        
                         {/* Descrição */}
                         <Typography variant="body2" sx={{ mb: 2 }}>{produto.descricao || "Sem descrição disponível."}</Typography>
 
-                        {/* <<< Preços e Desconto AJUSTADO */}
+                        {/* Preços e Desconto */}
                         <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', mb: 2, minHeight: '2.5em' }}>
                             {precoAntigo && economia > 0 && (
                                 <Typography sx={{ textDecoration: "line-through", color: "text.secondary", mr: 1, fontSize: '1rem' }}>
@@ -253,7 +305,7 @@ const Product = () => {
                             </Typography>
                         </Box>
 
-                        {/* ✅ NOVO: Mostrar economia se houver */}
+                        {/* Mostrar economia se houver */}
                         {economia > 0 && (
                             <Box sx={{ mb: 2 }}>
                                 <Typography variant="body2" color="success.main" sx={{ fontWeight: 'bold' }}>
@@ -269,9 +321,22 @@ const Product = () => {
                                 {disponibilidade.map((item, index) => (
                                     <ListItem key={index} sx={{ p: 0 }}>
                                         <ListItemText 
-                                            primary={`Filial ${item.filial}: ${item.quantidade} unidades`}
-                                            primaryTypographyProps={{ variant: 'body2', color: item.quantidade > 0 ? 'text.primary' : 'text.secondary' }}
+                                            primary={`${item.filial}: ${item.quantidade} unidades`}
+                                            primaryTypographyProps={{ 
+                                                variant: 'body2', 
+                                                color: item.quantidade > 0 ? 'text.primary' : 'text.secondary',
+                                                sx: { display: 'flex', alignItems: 'center', gap: 1 }
+                                            }}
                                         />
+                                        {item.disponivel ? (
+                                            <Typography variant="caption" color="success.main" sx={{ fontWeight: 'bold', ml: 1 }}>
+                                                ✅ Disponível
+                                            </Typography>
+                                        ) : (
+                                            <Typography variant="caption" color="error.main" sx={{ fontWeight: 'bold', ml: 1 }}>
+                                                ❌ Indisponível
+                                            </Typography>
+                                        )}
                                     </ListItem>
                                 ))}
                             </List>
@@ -298,4 +363,3 @@ const Product = () => {
 };
 
 export default Product;
-
